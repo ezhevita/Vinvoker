@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Vinvoker", "Vinvoker\Vinvoker.csproj", "{4DC93D09-8F01-4F29-A1E6-2042C09312C3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Vinvoker.Example", "Vinvoker.Example\Vinvoker.Example.csproj", "{1230DB04-0CAE-44E6-B839-2D9C475D30E8}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4DC93D09-8F01-4F29-A1E6-2042C09312C3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4DC93D09-8F01-4F29-A1E6-2042C09312C3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4DC93D09-8F01-4F29-A1E6-2042C09312C3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4DC93D09-8F01-4F29-A1E6-2042C09312C3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1230DB04-0CAE-44E6-B839-2D9C475D30E8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1230DB04-0CAE-44E6-B839-2D9C475D30E8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1230DB04-0CAE-44E6-B839-2D9C475D30E8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1230DB04-0CAE-44E6-B839-2D9C475D30E8}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
