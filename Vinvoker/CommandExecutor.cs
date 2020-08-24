@@ -73,12 +73,10 @@ namespace Vinvoker {
 
 				switch (argument.Name?.ToUpperInvariant()) {
 					case "BOT" when argument.ParameterType == typeof(Bot):
-						generator.Emit(OpCodes.Ldarg, 1);
-						generator.Emit(OpCodes.Stloc, local.LocalIndex);
+						generator.LoadAndStoreArg(1, local);
 						break;
 					case "STEAMID" when argument.ParameterType == typeof(ulong):
-						generator.Emit(OpCodes.Ldarg, 2);
-						generator.Emit(OpCodes.Stloc, local.LocalIndex);
+						generator.LoadAndStoreArg(2, local);
 						break;
 					default:
 						argIndex++;
@@ -86,7 +84,7 @@ namespace Vinvoker {
 						// [TextArgumentAttribute] case - parsing string argument as a text (e.g. including spaces), can be declared only for the latest argument
 						if ((argument.ParameterType == typeof(string)) && IsTextArgument(argument)) {
 							generator.LoadArgAsText(argIndex - 1);
-							generator.Emit(OpCodes.Stloc, local.LocalIndex);
+							generator.StoreArg(local);
 							goto argumentsParsed;
 						}
 
@@ -94,7 +92,7 @@ namespace Vinvoker {
 
 						// string case - save it as it is
 						if (argument.ParameterType == typeof(string)) {
-							generator.Emit(OpCodes.Stloc, local.LocalIndex);
+							generator.StoreArg(local);
 						} else {
 							// It's something else - we can try to find TryParse method in order to convert string to target type
 							MethodInfo parseMethod = argument.ParameterType.GetMethod("TryParse", BindingFlags.Static | BindingFlags.Public, null,

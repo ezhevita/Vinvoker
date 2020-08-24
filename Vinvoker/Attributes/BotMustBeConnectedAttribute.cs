@@ -2,6 +2,5 @@ using System;
 
 namespace Vinvoker.Attributes {
 	[AttributeUsage(AttributeTargets.Method)]
-	public class RequiresBeingConnectedAttribute : Attribute {
-	}
+	public class BotMustBeConnectedAttribute : Attribute { }
 }

@@ -11,6 +11,7 @@ namespace Vinvoker.Example {
 		public Task<string> Command() => Task.FromResult(nameof(Command) + " executed!");
 
 		[Permission(BotConfig.EPermission.Master)]
+		[BotMustBeConnected]
 		[UseBotsSelector]
 		public Task<string> CommandWithParsing(Bot bot, int arg) => Task.FromResult($"Executed from bot {bot.BotName} with arg {arg}");
 
