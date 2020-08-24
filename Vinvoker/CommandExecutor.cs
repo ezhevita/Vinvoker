@@ -34,17 +34,18 @@ namespace Vinvoker {
 			   .Select(Activator.CreateInstance)
 			   .Cast<ICommand>().ToDictionary(command => command.CommandName, command => command);
 
+			// Get all the commands variations (all user-declared methods) in each ICommand instance and prepare them
 			CommandMethods = commands
 			   .Select(command => (command.Key,
 					Methods: command.Value.GetType().GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public)
-					   .Where(method => method.Name != "get_CommandName")
-					   .Select(method => ParseMethodInfo(method, command.Value))
+					   .Where(method => !method.IsSpecialName)
+					   .Select(method => PrepareMethodInfo(method, command.Value))
 					   .Where(result => result != null)))
 			   .Where(command => command.Methods.Any())
 			   .ToDictionary(command => command.Key.ToUpperInvariant(), command => command.Methods.ToList());
 		}
 
-		private CommandMethodInfo ParseMethodInfo(MethodInfo methodInfo, ICommand command) {
+		private CommandMethodInfo PrepareMethodInfo(MethodInfo methodInfo, ICommand command) {
 			if ((methodInfo.ReturnType != typeof(string)) && (methodInfo.ReturnType != typeof(Task<string>))) {
 				ASF.ArchiLogger.LogGenericError($"{methodInfo.Name} has an invalid return type {methodInfo.ReturnType.FullName}!");
 				return null;
@@ -66,7 +67,7 @@ namespace Vinvoker {
 				generator.ValidatePermission(cmi.Permission);
 			}
 
-			byte index = 0;
+			byte argIndex = 0;
 			foreach (ParameterInfo argument in arguments) {
 				LocalBuilder local = generator.DeclareLocal(argument.ParameterType);
 
@@ -80,36 +81,40 @@ namespace Vinvoker {
 						generator.Emit(OpCodes.Stloc, local.LocalIndex);
 						break;
 					default:
-						index++;
-						if ((argument.ParameterType == typeof(string)) && argument.CustomAttributes.Any(attr => attr.AttributeType == typeof(TextArgumentAttribute))) {
-							generator.LoadArgAsText(index - 1);
+						argIndex++;
+
+						// [TextArgumentAttribute] case - parsing string argument as a text (e.g. including spaces), can be declared only for the latest argument
+						if ((argument.ParameterType == typeof(string)) && IsTextArgument(argument)) {
+							generator.LoadArgAsText(argIndex - 1);
 							generator.Emit(OpCodes.Stloc, local.LocalIndex);
-							goto end;
+							goto argumentsParsed;
 						}
 
-						generator.LoadArg(index - 1);
+						generator.LoadArg(argIndex - 1);
+
+						// string case - save it as it is
 						if (argument.ParameterType == typeof(string)) {
 							generator.Emit(OpCodes.Stloc, local.LocalIndex);
-							break;
+						} else {
+							// It's something else - we can try to find TryParse method in order to convert string to target type
+							MethodInfo parseMethod = argument.ParameterType.GetMethod("TryParse", BindingFlags.Static | BindingFlags.Public, null,
+								new[] {typeof(string), argument.ParameterType.MakeByRefType()}, null);
+
+							if (parseMethod == null) {
+								ASF.ArchiLogger.LogGenericError("Type " + argument.ParameterType.FullName + " could not be parsed!");
+								return null;
+							}
+
+							generator.Emit(OpCodes.Ldloca, local.LocalIndex);
+							generator.EmitCall(OpCodes.Call, parseMethod, null);
+							generator.GenerateInvalidParseBranch(argument.Name);
 						}
-
-						generator.Emit(OpCodes.Ldloca, local.LocalIndex);
-						MethodInfo parseMethod = argument.ParameterType.GetMethod("TryParse", BindingFlags.Static | BindingFlags.Public, null,
-							new[] {typeof(string), argument.ParameterType.MakeByRefType()}, null);
-
-						if (parseMethod == null) {
-							ASF.ArchiLogger.LogGenericError("Type " + argument.ParameterType.FullName + " could not be parsed!");
-							return null;
-						}
-
-						generator.EmitCall(OpCodes.Call, parseMethod, null);
-						generator.GenerateInvalidParseBranch(argument.Name);
 
 						break;
 				}
 			}
 
-			end:
+			argumentsParsed:
 			generator.Emit(OpCodes.Ldarg_0);
 			for (int i = 0; i < arguments.Length; i++) {
 				generator.Emit(OpCodes.Ldloc_S, i);
@@ -134,6 +139,10 @@ namespace Vinvoker {
 			}
 
 			return cmi;
+		}
+
+		private static bool IsTextArgument(ParameterInfo argument) {
+			return argument.CustomAttributes.Any(attr => attr.AttributeType == typeof(TextArgumentAttribute));
 		}
 	}
 }
