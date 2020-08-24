@@ -116,6 +116,10 @@ namespace Vinvoker {
 			}
 
 			generator.EmitCall(OpCodes.Callvirt, methodInfo, null);
+			if (methodInfo.ReturnType == typeof(string)) {
+				generator.EmitCall(OpCodes.Call, ((Func<string, Task<string>>) Task.FromResult).Method, null);
+			}
+
 			generator.Emit(OpCodes.Ret);
 
 			CommandFunction function = (CommandFunction) method.CreateDelegate(typeof(CommandFunction), command);
