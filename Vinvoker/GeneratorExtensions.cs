@@ -23,11 +23,11 @@ namespace Vinvoker {
 			Label parsedLabel = generator.DefineLabel();
 			generator.Emit(OpCodes.Brtrue_S, parsedLabel);
 			generator.Emit(OpCodes.Ldarg_1);
+			generator.Emit(OpCodes.Ldfld, typeof(Bot).GetField(nameof(Bot.Commands), BindingFlags.Instance | BindingFlags.Public));
 			generator.EmitCall(OpCodes.Call, typeof(Strings).GetProperty(nameof(Strings.ErrorIsInvalid), BindingFlags.Static | BindingFlags.Public).GetGetMethod(), null);
 			generator.Emit(OpCodes.Ldstr, parameterName);
 			generator.EmitCall(OpCodes.Call, ((Func<string, object, string>) string.Format).Method, null);
-			generator.Emit(OpCodes.Ldfld, typeof(Bot).GetField(nameof(Bot.Commands), BindingFlags.Instance | BindingFlags.Public));
-			generator.EmitCall(OpCodes.Callvirt, typeof(Commands).GetMethod("FormatBotResponse", BindingFlags.Instance | BindingFlags.Public), null);
+			generator.EmitCall(OpCodes.Callvirt, typeof(Commands).GetMethod(nameof(Commands.FormatBotResponse), BindingFlags.Instance | BindingFlags.Public), null);
 			generator.EmitCall(OpCodes.Call, ((Func<string, Task<string>>) Task.FromResult).Method, null);
 			generator.Emit(OpCodes.Ret);
 			generator.MarkLabel(parsedLabel);
@@ -72,7 +72,7 @@ namespace Vinvoker {
 			generator.Emit(OpCodes.Ldarg_1);
 			generator.Emit(OpCodes.Ldarg_2);
 			generator.Emit(OpCodes.Ldc_I4, (int) permission);
-			generator.EmitCall(OpCodes.Callvirt, typeof(Bot).GetMethod("HasPermission"), null);
+			generator.EmitCall(OpCodes.Callvirt, typeof(Bot).GetMethod(nameof(Bot.HasPermission)), null);
 
 			Label validPermission = generator.DefineLabel();
 			generator.Emit(OpCodes.Brtrue_S, validPermission);
