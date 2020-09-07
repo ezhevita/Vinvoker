@@ -67,6 +67,10 @@ namespace Vinvoker {
 				generator.ValidatePermission(cmi.Permission);
 			}
 
+			if (attributes.OfType<BotMustBeConnectedAttribute>().Any()) {
+				generator.CheckIfConnected();
+			}
+
 			byte argIndex = 0;
 			foreach (ParameterInfo argument in arguments) {
 				LocalBuilder local = generator.DeclareLocal(argument.ParameterType);

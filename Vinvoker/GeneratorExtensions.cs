@@ -82,6 +82,31 @@ namespace Vinvoker {
 			generator.MarkLabel(validPermission);
 		}
 
+		/// <summary>
+		/// Generates:
+		///
+		/// <code>
+		/// if (!bot.IsConnectedAndLoggedOn) {
+		///		return Task.FromResult&lt;string&gt;(bot.Commands.FormatBotResponse(Strings.BotNotConnected));
+		///	}
+		/// </code>
+		/// </summary>
+		public static void CheckIfConnected(this ILGenerator generator) {
+			generator.Emit(OpCodes.Ldarg_1);
+			generator.EmitCall(OpCodes.Callvirt, typeof(Bot).GetProperty(nameof(Bot.IsConnectedAndLoggedOn)).GetGetMethod(), null);
+
+			Label connectedLabel = generator.DefineLabel();
+			generator.Emit(OpCodes.Brtrue_S, connectedLabel);
+			generator.Emit(OpCodes.Ldarg_1);
+			generator.Emit(OpCodes.Ldfld, typeof(Bot).GetField(nameof(Bot.Commands), BindingFlags.Instance | BindingFlags.Public));
+			generator.EmitCall(OpCodes.Call, typeof(Strings).GetProperty(nameof(Strings.BotNotConnected), BindingFlags.Static | BindingFlags.Public).GetGetMethod(), null);
+			generator.EmitCall(OpCodes.Callvirt, typeof(Commands).GetMethod(nameof(Commands.FormatBotResponse), BindingFlags.Instance | BindingFlags.Public), null);
+			generator.EmitCall(OpCodes.Call, ((Func<string, Task<string>>) Task.FromResult).Method, null);
+			
+			generator.Emit(OpCodes.Ret);
+			generator.MarkLabel(connectedLabel);
+		}
+
 		public static void StoreArg(this ILGenerator generator, LocalBuilder local) {
 			generator.Emit(OpCodes.Stloc, local.LocalIndex);
 		}
