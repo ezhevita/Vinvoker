@@ -94,8 +94,20 @@ namespace Vinvoker {
 
 						generator.LoadArg(argIndex - 1);
 
-						// string case - save it as it is
 						if (argument.ParameterType == typeof(string)) {
+							// string case - save it as it is
+							generator.StoreArg(local);
+						} else if (argument.ParameterType == typeof(Bot)) {
+							// Bot case - we can parse it using Bot.GetBot method
+							generator.EmitCall(OpCodes.Call, ((Func<string, Bot>) Bot.GetBot).Method, null);
+							generator.StoreArg(local);
+						} else if (argument.ParameterType.IsAssignableFrom(typeof(HashSet<Bot>))) {
+							// Multiple bots case - we can parse it using Bot.GetBots method, we support any interfaces implemented by HashSet as well by casting
+							generator.EmitCall(OpCodes.Call, ((Func<string, HashSet<Bot>>) Bot.GetBots).Method, null);
+							if (argument.ParameterType != typeof(HashSet<Bot>)) {
+								generator.Emit(OpCodes.Castclass, argument.ParameterType);
+							}
+
 							generator.StoreArg(local);
 						} else {
 							// It's something else - we can try to find TryParse method in order to convert string to target type
