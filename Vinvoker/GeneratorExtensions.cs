@@ -14,6 +14,37 @@ namespace Vinvoker {
 		/// Generates:
 		///
 		/// <code>
+		///	if (stack == default) {
+		/// 	return Task.FromResult(bot.Commands.FormatBotResponse(string.Format(Strings.ErrorIsInvalid, parameterName)));
+		/// }
+		/// </code>
+		/// </summary>
+		public static void CheckForDefault(this ILGenerator generator, ParameterInfo parameterInfo) {
+			if (parameterInfo.ParameterType.IsValueType) {
+				generator.Emit(OpCodes.Initobj, parameterInfo.ParameterType);
+			} else {
+				generator.Emit(OpCodes.Ldnull);
+			}
+
+			generator.Emit(OpCodes.Ceq);
+			Label nonDefaultValue = generator.DefineLabel();
+			generator.Emit(OpCodes.Brfalse_S, nonDefaultValue);
+			
+			generator.Emit(OpCodes.Ldarg_1);
+			generator.Emit(OpCodes.Ldfld, typeof(Bot).GetField(nameof(Bot.Commands), BindingFlags.Instance | BindingFlags.Public));
+			generator.EmitCall(OpCodes.Call, typeof(Strings).GetProperty(nameof(Strings.ErrorIsInvalid), BindingFlags.Static | BindingFlags.Public).GetGetMethod(), null);
+			generator.Emit(OpCodes.Ldstr, parameterInfo.Name);
+			generator.EmitCall(OpCodes.Call, ((Func<string, object, string>) string.Format).Method, null);
+			generator.EmitCall(OpCodes.Callvirt, typeof(Commands).GetMethod(nameof(Commands.FormatBotResponse), BindingFlags.Instance | BindingFlags.Public), null);
+			generator.EmitCall(OpCodes.Call, ((Func<string, Task<string>>) Task.FromResult).Method, null);
+			generator.Emit(OpCodes.Ret);
+			generator.MarkLabel(nonDefaultValue);
+		}
+
+		/// <summary>
+		/// Generates:
+		///
+		/// <code>
 		///	if (!stack) {
 		///		return Task.FromResult(bot.Commands.FormatBotResponse(string.Format(Strings.ErrorIsInvalid, parameterName)));
 		///	}

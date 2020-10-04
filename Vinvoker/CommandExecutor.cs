@@ -88,6 +88,7 @@ namespace Vinvoker {
 						// [TextArgumentAttribute] case - parsing string argument as a text (e.g. including spaces), can be declared only for the latest argument
 						if ((argument.ParameterType == typeof(string)) && IsTextArgument(argument)) {
 							generator.LoadArgAsText(argIndex - 1);
+							
 							generator.StoreArg(local);
 							goto argumentsParsed;
 						}
@@ -95,11 +96,19 @@ namespace Vinvoker {
 						generator.LoadArg(argIndex - 1);
 
 						if (argument.ParameterType == typeof(string)) {
+							if (IsNonDefaultArgument(argument)) {
+								generator.CheckForDefault(argument);
+							}
+
 							// string case - save it as it is
 							generator.StoreArg(local);
 						} else if (argument.ParameterType == typeof(Bot)) {
 							// Bot case - we can parse it using Bot.GetBot method
 							generator.EmitCall(OpCodes.Call, ((Func<string, Bot>) Bot.GetBot).Method, null);
+							if (IsNonDefaultArgument(argument)) {
+								generator.CheckForDefault(argument);
+							}
+
 							generator.StoreArg(local);
 						} else if (argument.ParameterType.IsAssignableFrom(typeof(HashSet<Bot>))) {
 							// Multiple bots case - we can parse it using Bot.GetBots method, we support any interfaces implemented by HashSet as well by casting
@@ -108,9 +117,13 @@ namespace Vinvoker {
 								generator.Emit(OpCodes.Castclass, argument.ParameterType);
 							}
 
+							if (IsNonDefaultArgument(argument)) {
+								generator.CheckForDefault(argument);
+							}
+
 							generator.StoreArg(local);
 						} else {
-							// It's something else - we can try to find TryParse method in order to convert string to target type
+							// It's something else - we can try to find TryParse(string, out T) method in order to convert string to target type
 							MethodInfo parseMethod = argument.ParameterType.GetMethod("TryParse", BindingFlags.Static | BindingFlags.Public, null,
 								new[] {typeof(string), argument.ParameterType.MakeByRefType()}, null);
 
@@ -121,6 +134,11 @@ namespace Vinvoker {
 
 							generator.Emit(OpCodes.Ldloca, local.LocalIndex);
 							generator.EmitCall(OpCodes.Call, parseMethod, null);
+							if (IsNonDefaultArgument(argument)) {
+								generator.Emit(OpCodes.Ldloc, local.LocalIndex);
+								generator.CheckForDefault(argument);
+							}
+
 							generator.GenerateInvalidParseBranch(argument.Name);
 						}
 
@@ -157,6 +175,10 @@ namespace Vinvoker {
 
 		private static bool IsTextArgument(ParameterInfo argument) {
 			return argument.CustomAttributes.Any(attr => attr.AttributeType == typeof(TextArgumentAttribute));
+		}
+
+		private static bool IsNonDefaultArgument(ParameterInfo argument) {
+			return argument.CustomAttributes.Any(attr => attr.AttributeType == typeof(NonDefaultValueAttribute));
 		}
 	}
 }
