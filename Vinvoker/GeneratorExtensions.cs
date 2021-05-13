@@ -5,10 +5,11 @@ using System.Reflection.Emit;
 using System.Threading.Tasks;
 using ArchiSteamFarm;
 using ArchiSteamFarm.Localization;
+#pragma warning disable 8602
+#pragma warning disable 8604
 
 namespace Vinvoker {
 	[SuppressMessage("ReSharper", "AssignNullToNotNullAttribute")]
-	[SuppressMessage("ReSharper", "PossibleNullReferenceException")]
 	public static class GeneratorExtensions {
 		/// <summary>
 		/// Generates:
@@ -99,11 +100,11 @@ namespace Vinvoker {
 		///	}
 		/// </code>
 		/// </summary>
-		public static void ValidatePermission(this ILGenerator generator, BotConfig.EPermission permission) {
+		public static void ValidatePermission(this ILGenerator generator, BotConfig.EAccess permission) {
 			generator.Emit(OpCodes.Ldarg_1);
 			generator.Emit(OpCodes.Ldarg_2);
 			generator.Emit(OpCodes.Ldc_I4, (int) permission);
-			generator.EmitCall(OpCodes.Callvirt, typeof(Bot).GetMethod(nameof(Bot.HasPermission)), null);
+			generator.EmitCall(OpCodes.Callvirt, typeof(Bot).GetMethod(nameof(Bot.HasAccess)), null);
 
 			Label validPermission = generator.DefineLabel();
 			generator.Emit(OpCodes.Brtrue_S, validPermission);

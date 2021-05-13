@@ -11,7 +11,7 @@ using CommandFunction = Vinvoker.CommandMethodInfo.ExecutorFunction;
 
 namespace Vinvoker {
 	public class CommandExecutor {
-		private Dictionary<string, List<CommandMethodInfo>> CommandMethods { get; set; } = new Dictionary<string, List<CommandMethodInfo>>();
+		private Dictionary<string, List<CommandMethodInfo>> CommandMethods { get; set; } = new();
 
 		public Task<string?> Execute(Bot bot, ulong steamID, string message, string[] args) {
 			string commandName = args[0];
@@ -21,28 +21,24 @@ namespace Vinvoker {
 
 			IEnumerable<CommandMethodInfo> suitableMethods = methods.Where(method => method.ArgumentCount == args.Length - 1 - (method.UseBotsSelector ? 1 : 0));
 
-			return suitableMethods.First().ExecuteDelegate(bot, steamID, message, args.Skip(1).ToArray());
+			return suitableMethods.FirstOrDefault()?.ExecuteDelegate(bot, steamID, message, args.Skip(1).ToArray()) ?? Task.FromResult<string?>(null);
 		}
 
-		public void Load() {
-			if (CommandMethods != null) {
-				throw new InvalidOperationException(nameof(CommandMethods) + " are already initialized!");
-			}
-
-			Dictionary<string, ICommand> commands = Assembly.GetCallingAssembly().GetTypes()
-			   .Where(type => typeof(ICommand).IsAssignableFrom(type) && !type.IsAbstract)
-			   .Select(Activator.CreateInstance)
-			   .Cast<ICommand>().ToDictionary(command => command.CommandName, command => command);
+		public void LoadAssembly(Assembly assembly) {
+			Dictionary<string, ICommand> commands = assembly.GetTypes()
+				.Where(type => typeof(ICommand).IsAssignableFrom(type) && !type.IsAbstract)
+				.Select(Activator.CreateInstance)
+				.Cast<ICommand>().ToDictionary(command => command.CommandName, command => command);
 
 			// Get all the commands variations (all user-declared methods) in each ICommand instance and prepare them
 			CommandMethods = commands
-			   .Select(command => (command.Key,
+				.Select(command => (command.Key,
 					Methods: command.Value.GetType().GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public)
-					   .Where(method => !method.IsSpecialName)
-					   .Select(method => PrepareMethodInfo(method, command.Value))
-					   .Where(result => result != null)))
-			   .Where(command => command.Methods.Any())
-			   .ToDictionary(command => command.Key.ToUpperInvariant(), command => command.Methods.ToList())!;
+						.Where(method => !method.IsSpecialName)
+						.Select(method => PrepareMethodInfo(method, command.Value))
+						.Where(result => result != null)))
+				.Where(command => command.Methods.Any())
+				.ToDictionary(command => command.Key.ToUpperInvariant(), command => command.Methods.ToList())!;
 		}
 
 		private CommandMethodInfo? PrepareMethodInfo(MethodInfo methodInfo, ICommand command) {
@@ -56,11 +52,11 @@ namespace Vinvoker {
 			ParameterInfo[] arguments = methodInfo.GetParameters();
 
 			byte argumentCount = (byte) arguments.Count(arg => !(((arg.Name?.ToUpperInvariant() == "STEAMID") && (arg.ParameterType == typeof(ulong))) || ((arg.Name?.ToUpperInvariant() == "BOT") && (arg.ParameterType == typeof(Bot)))));
-			BotConfig.EPermission permission = attributes.OfType<PermissionAttribute>().FirstOrDefault()?.MinimumPermission ?? BotConfig.EPermission.None;
+			BotConfig.EAccess permission = attributes.OfType<PermissionAttribute>().FirstOrDefault()?.MinimumPermission ?? BotConfig.EAccess.Master;
 
-			DynamicMethod method = new DynamicMethod(methodInfo.Name + "Executor", typeof(Task<string>), new[] {typeof(ICommand), typeof(Bot), typeof(ulong), typeof(string), typeof(string[])});
+			DynamicMethod method = new(methodInfo.Name + "Executor", typeof(Task<string>), new[] {typeof(ICommand), typeof(Bot), typeof(ulong), typeof(string), typeof(string[])});
 			ILGenerator generator = method.GetILGenerator();
-			if (permission != BotConfig.EPermission.None) {
+			if (permission != BotConfig.EAccess.None) {
 				generator.ValidatePermission(permission);
 			}
 
@@ -93,7 +89,7 @@ namespace Vinvoker {
 						generator.LoadArg(argIndex - 1);
 
 						if (argument.ParameterType == typeof(string)) {
-							if (IsArgument<NonDefaultValueAttribute>(argument)) {
+							if (IsArgument<MustBeNonDefaultAttribute>(argument)) {
 								generator.CheckForDefault(argument);
 							}
 
@@ -102,7 +98,7 @@ namespace Vinvoker {
 						} else if (argument.ParameterType == typeof(Bot)) {
 							// Bot case - we can parse it using Bot.GetBot method
 							generator.EmitCall(OpCodes.Call, ((Func<string, Bot?>) Bot.GetBot).Method, null);
-							if (IsArgument<NonDefaultValueAttribute>(argument)) {
+							if (IsArgument<MustBeNonDefaultAttribute>(argument)) {
 								generator.CheckForDefault(argument);
 							}
 
@@ -114,7 +110,7 @@ namespace Vinvoker {
 								generator.Emit(OpCodes.Castclass, argument.ParameterType);
 							}
 
-							if (IsArgument<NonDefaultValueAttribute>(argument)) {
+							if (IsArgument<MustBeNonDefaultAttribute>(argument)) {
 								generator.CheckForDefault(argument);
 							}
 
@@ -131,7 +127,7 @@ namespace Vinvoker {
 
 							generator.Emit(OpCodes.Ldloca, local.LocalIndex);
 							generator.EmitCall(OpCodes.Call, parseMethod, null);
-							if (IsArgument<NonDefaultValueAttribute>(argument)) {
+							if (IsArgument<MustBeNonDefaultAttribute>(argument)) {
 								generator.Emit(OpCodes.Ldloc, local.LocalIndex);
 								generator.CheckForDefault(argument);
 							}
@@ -161,7 +157,7 @@ namespace Vinvoker {
 			bool useBotsSelector = attributes.OfType<UseBotsSelectorAttribute>().Any();
 			if (useBotsSelector) {
 				CommandFunction sourceFunction = function;
-				function = (bot, id, message, args) => BotSelectorProxy.ResponseBotSelectorProxy(id, message, args, sourceFunction);
+				function = (_, id, message, args) => BotSelectorProxy.ResponseBotSelectorProxy(id, message, args, sourceFunction);
 			}
 
 			return new CommandMethodInfo(argumentCount, function, permission, useBotsSelector);
