@@ -1,4 +1,4 @@
-using ArchiSteamFarm;
+using ArchiSteamFarm.Steam.Storage;
 using Vinvoker.Attributes;
 using Vinvoker.Interfaces;
 
@@ -7,12 +7,12 @@ namespace Vinvoker.Example {
 		public string CommandName => "example";
 
 		// !example [from any account]
-		[Permission(BotConfig.EAccess.None)]
+		[Access(BotConfig.EAccess.None)]
 		public string Command() => nameof(Command) + " executed!";
 
 		[BotMustBeConnected]
 		[UseBotsSelector]
-		public string CommandWithParsing(Bot bot, int arg) => $"Executed from bot {bot.BotName} with arg {arg}";
+		public string CommandWithParsing(IBot bot, int arg) => $"Executed from bot {bot.BotName} with arg {arg}";
 
 		// !example [from Master account]
 		public string CommandWithPermission() => nameof(CommandWithPermission) + " executed from master!";

@@ -6,3 +6,5 @@ gen
 
 bin
 obj
+
+*.DotSettings.user

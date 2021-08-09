@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Composition;
 using System.Reflection;
 using System.Threading.Tasks;
-using ArchiSteamFarm;
-using ArchiSteamFarm.Plugins;
+using ArchiSteamFarm.Core;
+using ArchiSteamFarm.Plugins.Interfaces;
+using ArchiSteamFarm.Steam;
 using JetBrains.Annotations;
-using McMaster.NETCore.Plugins;
 
 namespace Vinvoker {
 	[Export(typeof(IPlugin))]
@@ -19,12 +19,11 @@ namespace Vinvoker {
 			ASF.ArchiLogger.LogGenericTrace("Initializing...");
 			ASF.ArchiLogger.LogGenericTrace("Loading assemblies...");
 
-			var assemblies = LoadAssemblies();
+			HashSet<Assembly>? assemblies = LoadAssemblies();
 		}
 
 		private HashSet<Assembly>? LoadAssemblies() {
-			var loaders = new List<PluginLoader>();
-
+			return null;
 		}
 		
 		public string Name => nameof(Vinvoker);

@@ -4,10 +4,12 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Threading.Tasks;
-using ArchiSteamFarm;
+using ArchiSteamFarm.Core;
+using ArchiSteamFarm.Steam;
+using ArchiSteamFarm.Steam.Storage;
 using Vinvoker.Attributes;
+using Vinvoker.Implementations;
 using Vinvoker.Interfaces;
-using CommandFunction = Vinvoker.CommandMethodInfo.ExecutorFunction;
 
 namespace Vinvoker {
 	public class CommandExecutor {
@@ -21,7 +23,7 @@ namespace Vinvoker {
 
 			IEnumerable<CommandMethodInfo> suitableMethods = methods.Where(method => method.ArgumentCount == args.Length - 1 - (method.UseBotsSelector ? 1 : 0));
 
-			return suitableMethods.FirstOrDefault()?.ExecuteDelegate(bot, steamID, message, args.Skip(1).ToArray()) ?? Task.FromResult<string?>(null);
+			return suitableMethods.FirstOrDefault()?.ExecuteDelegate(new ASFBot(bot), steamID, message, args[1..]) ?? Task.FromResult<string?>(null);
 		}
 
 		public void LoadAssembly(Assembly assembly) {
@@ -41,8 +43,9 @@ namespace Vinvoker {
 				.ToDictionary(command => command.Key.ToUpperInvariant(), command => command.Methods.ToList())!;
 		}
 
-		private CommandMethodInfo? PrepareMethodInfo(MethodInfo methodInfo, ICommand command) {
-			if ((methodInfo.ReturnType != typeof(string)) && (methodInfo.ReturnType != typeof(Task<string>))) {
+		internal static CommandMethodInfo? PrepareMethodInfo(MethodInfo methodInfo, ICommand command) {
+			Type sourceType = typeof(string);
+			if ((methodInfo.ReturnType != sourceType) && (methodInfo.ReturnType != typeof(Task<string>))) {
 				ASF.ArchiLogger.LogGenericError($"{methodInfo.Name} has an invalid return type {methodInfo.ReturnType.FullName}!");
 				return null;
 			}
@@ -51,10 +54,10 @@ namespace Vinvoker {
 
 			ParameterInfo[] arguments = methodInfo.GetParameters();
 
-			byte argumentCount = (byte) arguments.Count(arg => !(((arg.Name?.ToUpperInvariant() == "STEAMID") && (arg.ParameterType == typeof(ulong))) || ((arg.Name?.ToUpperInvariant() == "BOT") && (arg.ParameterType == typeof(Bot)))));
-			BotConfig.EAccess permission = attributes.OfType<PermissionAttribute>().FirstOrDefault()?.MinimumPermission ?? BotConfig.EAccess.Master;
+			byte argumentCount = (byte) arguments.Count(arg => !(((arg.Name?.ToUpperInvariant() == "STEAMID") && (arg.ParameterType == typeof(ulong))) || ((arg.Name?.ToUpperInvariant() == "BOT") && (arg.ParameterType == typeof(IBot)))));
+			BotConfig.EAccess permission = attributes.OfType<AccessAttribute>().FirstOrDefault()?.MinimalAccess ?? BotConfig.EAccess.Master;
 
-			DynamicMethod method = new(methodInfo.Name + "Executor", typeof(Task<string>), new[] {typeof(ICommand), typeof(Bot), typeof(ulong), typeof(string), typeof(string[])});
+			DynamicMethod method = new(methodInfo.Name + "Executor", typeof(Task<string>), new[] {typeof(ICommand), typeof(IBot), typeof(ulong), sourceType, typeof(string[])});
 			ILGenerator generator = method.GetILGenerator();
 			if (permission != BotConfig.EAccess.None) {
 				generator.ValidatePermission(permission);
@@ -66,21 +69,22 @@ namespace Vinvoker {
 
 			byte argIndex = 0;
 			foreach (ParameterInfo argument in arguments) {
-				LocalBuilder local = generator.DeclareLocal(argument.ParameterType);
+				Type targetType = argument.ParameterType;
+				LocalBuilder local = generator.DeclareLocal(targetType);
 
 				switch (argument.Name?.ToUpperInvariant()) {
-					case "BOT" when argument.ParameterType == typeof(Bot):
+					case "BOT" when targetType == typeof(IBot):
 						generator.LoadAndStoreArg(1, local);
 						break;
-					case "STEAMID" when argument.ParameterType == typeof(ulong):
+					case "STEAMID" when targetType == typeof(ulong):
 						generator.LoadAndStoreArg(2, local);
 						break;
 					default:
 						argIndex++;
 
-						// [TextArgumentAttribute] case - parsing string argument as a text (e.g. including spaces), can be declared only for the latest argument
-						if ((argument.ParameterType == typeof(string)) && IsArgument<TextAttribute>(argument)) {
-							generator.LoadArgAsText(argIndex - 1);
+						// [TextAttribute] case - parsing string argument as a text (e.g. including spaces), can be declared only for the latest argument
+						if ((targetType == sourceType) && IsArgument<TextAttribute>(argument)) {
+							generator.LoadArgAsText(argIndex);
 							
 							generator.StoreArg(local);
 							goto argumentsParsed;
@@ -88,51 +92,49 @@ namespace Vinvoker {
 
 						generator.LoadArg(argIndex - 1);
 
-						if (argument.ParameterType == typeof(string)) {
-							if (IsArgument<MustBeNonDefaultAttribute>(argument)) {
-								generator.CheckForDefault(argument);
-							}
-
-							// string case - save it as it is
-							generator.StoreArg(local);
-						} else if (argument.ParameterType == typeof(Bot)) {
-							// Bot case - we can parse it using Bot.GetBot method
-							generator.EmitCall(OpCodes.Call, ((Func<string, Bot?>) Bot.GetBot).Method, null);
-							if (IsArgument<MustBeNonDefaultAttribute>(argument)) {
-								generator.CheckForDefault(argument);
-							}
-
-							generator.StoreArg(local);
-						} else if (argument.ParameterType.IsAssignableFrom(typeof(HashSet<Bot>))) {
-							// Multiple bots case - we can parse it using Bot.GetBots method, we support any interfaces implemented by HashSet as well by casting
-							generator.EmitCall(OpCodes.Call, ((Func<string, HashSet<Bot>?>) Bot.GetBots).Method, null);
+						if (targetType == sourceType) {
+							// No processing required
+						} else if (argument.ParameterType == typeof(IBot)) {
+							// Bot case - we can parse it using GetBot method
+							generator.EmitCall(OpCodes.Call, typeof(Bot).GetMethod(nameof(Bot.GetBot))!, null);
+						} else if (typeof(HashSet<Bot>).IsAssignableFrom(argument.ParameterType)) {
+							// Multiple bots case - we can parse it using Bot.GetBots method, we support any interfaces implemented by HashSet as well by casting]
+							generator.EmitCall(OpCodes.Call, typeof(Bot).GetMethod(nameof(Bot.GetBots))!, null);
 							if (argument.ParameterType != typeof(HashSet<Bot>)) {
 								generator.Emit(OpCodes.Castclass, argument.ParameterType);
 							}
-
-							if (IsArgument<MustBeNonDefaultAttribute>(argument)) {
-								generator.CheckForDefault(argument);
-							}
-
-							generator.StoreArg(local);
+						} else if (targetType.IsAssignableFrom(sourceType)) {
+							// It's something else - trying to use generic cast at first
+							generator.Emit(OpCodes.Castclass, targetType);
 						} else {
-							// It's something else - we can try to find TryParse(string, out T) method in order to convert string to target type
-							MethodInfo? parseMethod = argument.ParameterType.GetMethod("TryParse", BindingFlags.Static | BindingFlags.Public, null,
-								new[] {typeof(string), argument.ParameterType.MakeByRefType()}, null);
+							// Trying to find custom casting method
+							MethodInfo? castMethod = GetCastMethod(targetType, m => m.GetParameters()[0].ParameterType, _ => sourceType) ??
+								GetCastMethod(sourceType, _ => targetType, m => m.ReturnType);
 
-							if (parseMethod == null) {
-								ASF.ArchiLogger.LogGenericError("Type " + argument.ParameterType.FullName + " could not be parsed!");
-								return null;
-							}
+							if (castMethod != null) {
+								generator.EmitCall(OpCodes.Call, castMethod, null);
+							} else {
+								// Trying to find TryParse(string, out T) method in order to convert string to target type
+								MethodInfo? parseMethod = targetType.GetMethod("TryParse", BindingFlags.Static | BindingFlags.Public | BindingFlags.FlattenHierarchy, null,
+									new[] {sourceType, targetType.MakeByRefType()}, null);
 
-							generator.Emit(OpCodes.Ldloca, local.LocalIndex);
-							generator.EmitCall(OpCodes.Call, parseMethod, null);
-							if (IsArgument<MustBeNonDefaultAttribute>(argument)) {
+								if (parseMethod == null) {
+									ASF.ArchiLogger.LogGenericError($"Type {targetType.FullName} in {command.CommandName}/{methodInfo.Name} could not be parsed!");
+									return null;
+								}
+
+								generator.Emit(OpCodes.Ldloca, local.LocalIndex);
+								generator.EmitCall(OpCodes.Call, parseMethod, null);
+								generator.GenerateInvalidParseBranch(argument.Name!);
 								generator.Emit(OpCodes.Ldloc, local.LocalIndex);
-								generator.CheckForDefault(argument);
 							}
+						}
 
-							generator.GenerateInvalidParseBranch(argument.Name!);
+						generator.StoreArg(local);
+
+						if (IsArgument<MustBeNonDefaultAttribute>(argument)) {
+							generator.Emit(OpCodes.Ldloc, local);
+							generator.CheckForDefault(argument);
 						}
 
 						break;
@@ -142,25 +144,30 @@ namespace Vinvoker {
 			argumentsParsed:
 			generator.Emit(OpCodes.Ldarg_0);
 			for (int i = 0; i < arguments.Length; i++) {
-				generator.Emit(OpCodes.Ldloc_S, i);
+				generator.Emit(OpCodes.Ldloc, i);
 			}
 
 			generator.EmitCall(OpCodes.Callvirt, methodInfo, null);
-			if (methodInfo.ReturnType == typeof(string)) {
+			if (methodInfo.ReturnType == sourceType) {
 				generator.EmitCall(OpCodes.Call, ((Func<string, Task<string>>) Task.FromResult).Method, null);
 			}
 
 			generator.Emit(OpCodes.Ret);
 
-			CommandFunction function = (CommandFunction) method.CreateDelegate(typeof(CommandFunction), command);
+			ExecutorFunction function = (ExecutorFunction) method.CreateDelegate(typeof(ExecutorFunction), command);
 
 			bool useBotsSelector = attributes.OfType<UseBotsSelectorAttribute>().Any();
 			if (useBotsSelector) {
-				CommandFunction sourceFunction = function;
+				ExecutorFunction sourceFunction = function;
 				function = (_, id, message, args) => BotSelectorProxy.ResponseBotSelectorProxy(id, message, args, sourceFunction);
 			}
 
 			return new CommandMethodInfo(argumentCount, function, permission, useBotsSelector);
+		}
+
+		private static MethodInfo? GetCastMethod(IReflect type, Func<MethodInfo, Type> baseType, Func<MethodInfo, Type> derivedType) {
+			return type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)
+				.FirstOrDefault(m => (m.Name is "op_Implicit" or "op_Explicit") && baseType(m).IsAssignableFrom(derivedType(m)));
 		}
 
 		private static bool IsArgument<T>(ParameterInfo argument) where T : Attribute {

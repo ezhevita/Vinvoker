@@ -4,6 +4,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Vinvoker", "Vinvoker\Vinvok
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Vinvoker.Example", "Vinvoker.Example\Vinvoker.Example.csproj", "{1230DB04-0CAE-44E6-B839-2D9C475D30E8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Vinvoker.Tests", "Vinvoker.Tests\Vinvoker.Tests.csproj", "{E5D8358B-D622-48AE-9592-FC7E8396F9A1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Vinvoker.CodeGen", "Vinvoker.CodeGen\Vinvoker.CodeGen.csproj", "{1213A0E3-7B27-4A9B-AEA4-E49A9AAD7F90}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +22,13 @@ Global
 		{1230DB04-0CAE-44E6-B839-2D9C475D30E8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1230DB04-0CAE-44E6-B839-2D9C475D30E8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1230DB04-0CAE-44E6-B839-2D9C475D30E8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E5D8358B-D622-48AE-9592-FC7E8396F9A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5D8358B-D622-48AE-9592-FC7E8396F9A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5D8358B-D622-48AE-9592-FC7E8396F9A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5D8358B-D622-48AE-9592-FC7E8396F9A1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1213A0E3-7B27-4A9B-AEA4-E49A9AAD7F90}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1213A0E3-7B27-4A9B-AEA4-E49A9AAD7F90}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1213A0E3-7B27-4A9B-AEA4-E49A9AAD7F90}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1213A0E3-7B27-4A9B-AEA4-E49A9AAD7F90}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

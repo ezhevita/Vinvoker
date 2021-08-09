@@ -1,10 +1,15 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Threading.Tasks;
-using ArchiSteamFarm;
+using ArchiSteamFarm.Core;
 using ArchiSteamFarm.Localization;
+using ArchiSteamFarm.Steam.Interaction;
+using ArchiSteamFarm.Steam.Storage;
+using Vinvoker.Interfaces;
+
 #pragma warning disable 8602
 #pragma warning disable 8604
 
@@ -13,7 +18,15 @@ namespace Vinvoker {
 	public static class GeneratorExtensions {
 		/// <summary>
 		/// Generates:
-		///
+		/// <br/>
+		/// if <c>stack is string</c>:
+		/// <code>
+		///	if (string.IsNullOrEmpty(string)) {
+		/// 	return Task.FromResult(bot.Commands.FormatBotResponse(string.Format(Strings.ErrorIsInvalid, parameterName)));
+		/// }
+		/// </code>
+		/// else:
+		/// <br/>
 		/// <code>
 		///	if (stack == default) {
 		/// 	return Task.FromResult(bot.Commands.FormatBotResponse(string.Format(Strings.ErrorIsInvalid, parameterName)));
@@ -21,24 +34,16 @@ namespace Vinvoker {
 		/// </code>
 		/// </summary>
 		public static void CheckForDefault(this ILGenerator generator, ParameterInfo parameterInfo) {
-			if (parameterInfo.ParameterType.IsValueType) {
-				generator.Emit(OpCodes.Initobj, parameterInfo.ParameterType);
-			} else {
-				generator.Emit(OpCodes.Ldnull);
+			if (parameterInfo.ParameterType == typeof(string)) {
+				generator.EmitCall(OpCodes.Call, typeof(string).GetMethod(nameof(string.IsNullOrEmpty), BindingFlags.Static | BindingFlags.Public), null);
+				generator.Emit(OpCodes.Ldc_I4_0);
+				generator.Emit(OpCodes.Ceq);
 			}
 
-			generator.Emit(OpCodes.Ceq);
 			Label nonDefaultValue = generator.DefineLabel();
-			generator.Emit(OpCodes.Brfalse_S, nonDefaultValue);
+			generator.Emit(OpCodes.Brtrue_S, nonDefaultValue);
 			
-			generator.Emit(OpCodes.Ldarg_1);
-			generator.Emit(OpCodes.Ldfld, typeof(Bot).GetField(nameof(Bot.Commands), BindingFlags.Instance | BindingFlags.Public));
-			generator.EmitCall(OpCodes.Call, typeof(Strings).GetProperty(nameof(Strings.ErrorIsInvalid), BindingFlags.Static | BindingFlags.Public).GetGetMethod(), null);
-			generator.Emit(OpCodes.Ldstr, parameterInfo.Name);
-			generator.EmitCall(OpCodes.Call, ((Func<string, object, string>) string.Format).Method, null);
-			generator.EmitCall(OpCodes.Callvirt, typeof(Commands).GetMethod(nameof(Commands.FormatBotResponse), BindingFlags.Instance | BindingFlags.Public), null);
-			generator.EmitCall(OpCodes.Call, ((Func<string, Task<string>>) Task.FromResult).Method, null);
-			generator.Emit(OpCodes.Ret);
+			generator.GenerateResponse(nameof(Strings.ErrorIsInvalid), parameterInfo.Name);
 			generator.MarkLabel(nonDefaultValue);
 		}
 
@@ -47,22 +52,41 @@ namespace Vinvoker {
 		///
 		/// <code>
 		///	if (!stack) {
-		///		return Task.FromResult(bot.Commands.FormatBotResponse(string.Format(Strings.ErrorIsInvalid, parameterName)));
+		///		return Task.FromResult(Commands.FormatStaticResponse(string.Format(Strings.ErrorIsInvalid, parameterName)));
 		///	}
 		/// </code>
 		/// </summary>
 		public static void GenerateInvalidParseBranch(this ILGenerator generator, string parameterName) {
 			Label parsedLabel = generator.DefineLabel();
 			generator.Emit(OpCodes.Brtrue_S, parsedLabel);
-			generator.Emit(OpCodes.Ldarg_1);
-			generator.Emit(OpCodes.Ldfld, typeof(Bot).GetField(nameof(Bot.Commands), BindingFlags.Instance | BindingFlags.Public));
-			generator.EmitCall(OpCodes.Call, typeof(Strings).GetProperty(nameof(Strings.ErrorIsInvalid), BindingFlags.Static | BindingFlags.Public).GetGetMethod(), null);
-			generator.Emit(OpCodes.Ldstr, parameterName);
-			generator.EmitCall(OpCodes.Call, ((Func<string, object, string>) string.Format).Method, null);
-			generator.EmitCall(OpCodes.Callvirt, typeof(Commands).GetMethod(nameof(Commands.FormatBotResponse), BindingFlags.Instance | BindingFlags.Public), null);
+			generator.GenerateResponse(nameof(Strings.ErrorIsInvalid), parameterName);
+			generator.MarkLabel(parsedLabel);
+		}
+
+		private static void GenerateResponse(this ILGenerator generator, string responseName, string? argument = null) {
+			generator.Emit(OpCodes.Ldarg_2);
+			generator.EmitCall(OpCodes.Call, typeof(ASF).GetMethod(nameof(ASF.IsOwner), BindingFlags.Static | BindingFlags.Public), null);
+			Label notNullLabel = generator.DefineLabel();
+			Label taskFromResultLabel = generator.DefineLabel();
+			generator.Emit(OpCodes.Brtrue_S, notNullLabel);
+			generator.Emit(OpCodes.Ldnull);
+			generator.Emit(OpCodes.Br_S, taskFromResultLabel);
+			generator.MarkLabel(notNullLabel);
+			if (!string.IsNullOrEmpty(argument)) {
+				generator.EmitCall(OpCodes.Call, typeof(CultureInfo).GetProperty(nameof(CultureInfo.CurrentCulture), BindingFlags.Static | BindingFlags.Public).GetGetMethod(), null);
+			}
+
+			generator.EmitCall(OpCodes.Call, typeof(Strings).GetProperty(responseName, BindingFlags.Static | BindingFlags.Public).GetGetMethod(), null);
+
+			if (!string.IsNullOrEmpty(argument)) {
+				generator.Emit(OpCodes.Ldstr, argument);
+				generator.EmitCall(OpCodes.Call, ((Func<CultureInfo, string, object, string>) string.Format).Method, null);
+			}
+
+			generator.EmitCall(OpCodes.Call, typeof(Commands).GetMethod(nameof(Commands.FormatStaticResponse), BindingFlags.Static | BindingFlags.Public), null);
+			generator.MarkLabel(taskFromResultLabel);
 			generator.EmitCall(OpCodes.Call, ((Func<string, Task<string>>) Task.FromResult).Method, null);
 			generator.Emit(OpCodes.Ret);
-			generator.MarkLabel(parsedLabel);
 		}
 
 		/// <summary>
@@ -104,7 +128,7 @@ namespace Vinvoker {
 			generator.Emit(OpCodes.Ldarg_1);
 			generator.Emit(OpCodes.Ldarg_2);
 			generator.Emit(OpCodes.Ldc_I4, (int) permission);
-			generator.EmitCall(OpCodes.Callvirt, typeof(Bot).GetMethod(nameof(Bot.HasAccess)), null);
+			generator.EmitCall(OpCodes.Callvirt, typeof(IBot).GetMethod(nameof(IBot.HasAccess)), null);
 
 			Label validPermission = generator.DefineLabel();
 			generator.Emit(OpCodes.Brtrue_S, validPermission);
@@ -125,17 +149,12 @@ namespace Vinvoker {
 		/// </summary>
 		public static void CheckIfConnected(this ILGenerator generator) {
 			generator.Emit(OpCodes.Ldarg_1);
-			generator.EmitCall(OpCodes.Callvirt, typeof(Bot).GetProperty(nameof(Bot.IsConnectedAndLoggedOn)).GetGetMethod(), null);
+			generator.EmitCall(OpCodes.Callvirt, typeof(IBot).GetProperty(nameof(IBot.IsConnectedAndLoggedOn)).GetGetMethod(), null);
 
 			Label connectedLabel = generator.DefineLabel();
 			generator.Emit(OpCodes.Brtrue_S, connectedLabel);
-			generator.Emit(OpCodes.Ldarg_1);
-			generator.Emit(OpCodes.Ldfld, typeof(Bot).GetField(nameof(Bot.Commands), BindingFlags.Instance | BindingFlags.Public));
-			generator.EmitCall(OpCodes.Call, typeof(Strings).GetProperty(nameof(Strings.BotNotConnected), BindingFlags.Static | BindingFlags.Public).GetGetMethod(), null);
-			generator.EmitCall(OpCodes.Callvirt, typeof(Commands).GetMethod(nameof(Commands.FormatBotResponse), BindingFlags.Instance | BindingFlags.Public), null);
-			generator.EmitCall(OpCodes.Call, ((Func<string, Task<string>>) Task.FromResult).Method, null);
 			
-			generator.Emit(OpCodes.Ret);
+			generator.GenerateResponse(nameof(Strings.BotNotConnected));
 			generator.MarkLabel(connectedLabel);
 		}
 
